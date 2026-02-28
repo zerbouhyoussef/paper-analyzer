@@ -1,0 +1,5 @@
+openai
+sentence-transformers
+pydantic
+python-dotenv
+azure-search-documents

@@ -1,0 +1,93 @@
+services:
+  ingestor:
+    build:
+      context: ..
+      dockerfile: services/ingestor/Dockerfile
+    env_file: ../.env
+    volumes:
+      - paper-data:/app/data
+
+  extractor:
+    build:
+      context: ..
+      dockerfile: services/extractor/Dockerfile
+    volumes:
+      - paper-data:/app/data
+    depends_on:
+      ingestor:
+        condition: service_completed_successfully
+
+  validator:
+    build:
+      context: ..
+      dockerfile: services/validator/Dockerfile
+    volumes:
+      - paper-data:/app/data
+    depends_on:
+      extractor:
+        condition: service_completed_successfully
+
+  enricher:
+    build:
+      context: ..
+      dockerfile: services/enricher/Dockerfile
+    env_file: ../.env
+    volumes:
+      - paper-data:/app/data
+    depends_on:
+      validator:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: ../.env
+    volumes:
+      - paper-data:/app/data
+    depends_on:
+      enricher:
+        condition: service_completed_successfully
+
+  ui:
+    build:
+      context: ..
+      dockerfile: services/ui/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/config.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    env_file: ../.env
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+volumes:
+  paper-data:
+  prometheus-data:
